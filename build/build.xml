@@ -1,0 +1,131 @@
+<project name="IIBBuild" default="buildbar" basedir=".">
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties">
+		<classpath>
+			<pathelement location="${antcotrib}" />
+		</classpath>
+	</taskdef>
+
+	<property name="logfile" value="${basedir}/dist/Build.log" />
+	<property file="build.properties" />
+
+	<condition property="buildCon">
+		<not>
+			<equals arg1="${barFileName}" arg2="NA" />
+		</not>
+	</condition>
+
+	<target name="buildbar">
+		<antcall target="cleanAll" />
+		<antcall target="createBar" />
+		<!-- Either copyBarToAllEnvFolders or  overrideBarProperty target has to be called not both. If BAR file has 
+		to be updated with env specific property then call  overrideBarProperty, otherwise call copyBarToAllEnvFolders-->
+		<!--<antcall target="copyBarToAllEnvFolders" />-->
+		<antcall target="overrideBarProperty" /> 
+	</target>
+
+	<!-- Cleans the entire contents of dist directory -->
+	<target name="cleanAll" description="Cleans all files in dist">
+		<delete includeemptydirs="true" failonerror="false">
+			<fileset dir="${dist.dir}">
+			</fileset>
+		</delete>
+		<delete failonerror="false" dir="${src.dir}/.metadata" />
+	</target>
+
+	<target name="createBar" if="buildCon">
+
+		<echo message="Building IIB archive file : ${barFileName}.bar " />
+		<echo message="Source Directory : ${src.dir} " />
+
+		<exec executable="${iib.base}/mqsicreatebar" spawn="false" failonerror="true" logError="true" vmlauncher="false" append="true">
+			<arg value="-data" />
+			<arg value="${src.dir}" />
+			<arg value="-b" />
+			<arg value="${dist.dir}/${barFileName}.bar" />
+			<arg value="-cleanBuild" />
+			<arg value="-a" />
+			<arg value="${barFileName}" />
+			<arg value="-deployAsSource" />
+			<arg value="-skipWSErrorCheck" />
+			<arg value="-trace" />
+			<arg value="-v" />
+			<arg value="${logfile}" />
+		</exec>
+		<echo message="completed building Bar File. Bar file is in the location :-" />
+		<echo message="${dist.dir}/${barFileName}.bar" />
+	</target>
+
+	<target name="copyBarToAllEnvFolders" description="This target has to be called when overrideBarProperty (which override the bar with env specific property files) target is not called
+		so that bar fils can be copied to env folders for deployment">
+
+		<foreach list="${env}" delimiter="," param="env" target="copyBartoEnvFolder" inheritall="true" />
+
+	</target>
+
+	<target name="copyBartoEnvFolder">
+		<mkdir dir="${dist.dir}/${env}" />
+		<copy todir="${dist.dir}/${env}">
+			<fileset dir="${dist.dir}" includes="*.bar">
+			</fileset>
+		</copy>
+	</target>
+
+
+	<target name="overrideBarProperty">
+
+		<foreach list="${env}" delimiter="," param="env" target="overridebar" inheritall="true" />
+
+	</target>
+
+	<target name="overridebar">
+		<property name="propertiesfile" value="${barFileName}_${env}.properties" />
+		<property name="overridebarfilename" value="${barFileName}_${env}.bar" />
+		<echo message="Overriding broker archive file :- ${barFileName}.bar" />
+		<echo message="Environment -  ${env}" />
+		<echo message="Properties file - ${propertiesfile}" />
+		<mkdir dir="${dist.dir}/${env}" />
+
+		<if>
+			<equals arg1="${isLinuxEnv}" arg2="yes" />
+			<then>
+				<antcall target="callLinuxMQSIApplyBAROverrideCMD" />
+			</then>
+			<else>
+				<antcall target="callWindowsMQSIApplyBAROverrideCMD" />
+			</else>
+		</if>
+
+		<echo message="Completed overriding broker archive file : ${barFileName}.bar" />
+		<echo message="Updated bar file: ${overridebarfilename}" />
+		<!--<delete file="${dist.dir}/${applicationName}/${applicationName}.bar"/> -->
+	</target>
+
+	<target name="callLinuxMQSIApplyBAROverrideCMD">
+		<echo message="callLinuxMQSIAapplyBAROverrideCMD" />
+		<exec executable="/bin/sh">
+			<arg value="-c" />
+			<arg value="source /usr1/iib-10.0.0.8/server/bin/mqsiprofile;${iib.bin}/mqsiapplybaroverride -b ${dist.dir}/${barFileName}.bar -k ${barFileName} -p ${propertiesfile} -o  ${dist.dir}/${env}/${overridebarfilename} -r -v ${logfile}" />
+		</exec>
+	</target>
+	
+	<target name="callWindowsMQSIApplyBAROverrideCMD">
+		<echo message="executing callWindowsMQSIAapplyBAROverrideCMD" />
+		<exec executable="${iib.bin}/mqsiprofile" spawn="false" failonerror="true" logError="true" vmlauncher="false" append="true">
+			<arg value="&amp;" />
+			<arg value="${iib.bin}/mqsiapplybaroverride" />
+			<arg value="-b" />
+			<arg value="${dist.dir}/${barFileName}.bar" />
+			<arg value="-k" />
+			<arg value="${barFileName}" />
+			<arg value="-p" />
+			<arg value="${propertiesfile}" />
+			<arg value="-o" />
+			<arg value="${dist.dir}/${env}/${overridebarfilename}" />
+			<arg value="-r" />
+			<arg value="-v" />
+			<arg value="${logfile}" />
+		</exec>
+
+	</target>
+
+</project>
